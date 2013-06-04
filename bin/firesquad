@@ -19,8 +19,12 @@ if __name__=="__main__":
     split.set_defaults(CommandClass=Split)
 
     # Load Command
-    split = subparsers.add_parser('load', help="Load data from csv files into MemSQL.")
-    split.set_defaults(CommandClass=Load)
+    load = subparsers.add_parser('load', help="Load data from csv files into MemSQL.")
+    load.add_argument('-t', '--tables-dir', dest="tables_dir", required=True, help="The directory containing data/table definitions.")
+    load.add_argument('-w', '--workers', type=int, default=8, help="The number of workers to run.")
+    load.add_argument('-o', '--host', required=True, help="The mysql instance to insert into.")
+    load.add_argument('-d', '--database', required=True, help="The mysql database to insert into.")
+    load.set_defaults(CommandClass=Load)
 
     options = parser.parse_args()
     command = options.CommandClass(options)
