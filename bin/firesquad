@@ -1,0 +1,26 @@
+#!env python
+import os, sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
+
+from firesquad.split import Split
+from firesquad.load import Load
+
+import argparse
+
+if __name__=="__main__":
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers()
+
+    # Split Command
+    split = subparsers.add_parser('split', help="Split a csv file into a number of chunks of <chunk-size> lines.")
+    split.add_argument('-s', '--chunk-size', dest="chunk_size", type=int, default=10000, help="The number of lines in each chunk.")
+    split.add_argument('-o', '--output-dir', dest="output_dir", required=True, help="The directory to write the split files to")
+    split.add_argument('files', default=[], nargs="*", help="A list of csv files to split.")
+    split.set_defaults(CommandClass=Split)
+
+    # Load Command
+    split = subparsers.add_parser('load', help="Load data from csv files into MemSQL.")
+    split.set_defaults(CommandClass=Load)
+
+    options = parser.parse_args()
+    command = options.CommandClass(options)
