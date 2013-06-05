@@ -8,10 +8,6 @@ import sys
 class Split():
     def __init__(self, options):
         self.options = options
-        if self.options.chunk_size % 2 != 0:
-            print "--chunk-size must be an even number of bytes!"
-            sys.exit(1)
-
         self.split()
 
     def split(self):
@@ -43,6 +39,11 @@ class Split():
         read_all = False
         with open(filename, 'r') as fd:
             while not read_all:
+                # ensure we arn't going to launch a dd process if we are at the parallelism limit
+                while len([p for p in self.procs.values() if p.poll() is None]) >= self.options.parallelism:
+                    self.kill_finished_procs()
+                    time.sleep(.3)
+
                 # store the current position
                 b_start = fd.tell()
                 # seek chunk_size bytes forward
@@ -59,21 +60,12 @@ class Split():
 
                 # and then doooooo it
                 output_filename = os.path.join(output_dir, prefix_gen.next())
-                self.procs[output_filename] = self.dd_split(filename, b_start, b_end, output_filename, read_all)
+                self.procs[output_filename] = self.dd_split(filename, b_start, b_end, output_filename)
 
-                while len([p for p in self.procs.values() if p.poll() is None]) >= self.options.parallelism:
-                    self.kill_finished_procs()
-                    time.sleep(.3)
-
-    def dd_split(self, filename, b_start, b_end, output_filename, read_all):
-        if read_all:
-            skip_count = b_start
-            blocksize = 1
-            count = b_end - b_start
-        else:
-            blocksize = self.options.chunk_size
-            skip_count = b_start / blocksize
-            count = 1
+    def dd_split(self, filename, b_start, b_end, output_filename):
+        blocksize = self.options.chunk_size
+        skip_count = b_start / blocksize
+        count = 1
         proc = subprocess.Popen([
             'dd',
             'skip=%d' % skip_count,     # skip <skip_count> blocks
