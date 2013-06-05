@@ -26,13 +26,16 @@ class Split():
             self.split_file(filename, output_dir)
 
         while True:
-            for filename, proc in self.procs.items():
-                if proc.poll() is not None:
-                    print "%s finished" % filename
-                    del(self.procs[filename])
+            self.kill_finished_procs()
 
             if len(self.procs) == 0:
                 break
+
+    def kill_finished_procs(self):
+        for filename, proc in self.procs.items():
+            if proc.poll() is not None:
+                print "%s finished" % filename
+                del(self.procs[filename])
 
     def split_file(self, filename, output_dir):
         prefix_gen = itertools.imap(lambda i: "%03d" % i, itertools.count(0))
@@ -58,9 +61,9 @@ class Split():
                 output_filename = os.path.join(output_dir, prefix_gen.next())
                 self.procs[output_filename] = self.dd_split(filename, b_start, b_end, output_filename, read_all)
 
-                while len([p for p in self.procs.values() if p.poll() is None]) > self.options.parallelism:
-                    print "waiting for workers"
-                    time.sleep(.1)
+                while len([p for p in self.procs.values() if p.poll() is None]) >= self.options.parallelism:
+                    self.kill_finished_procs()
+                    time.sleep(.3)
 
     def dd_split(self, filename, b_start, b_end, output_filename, read_all):
         if read_all:
