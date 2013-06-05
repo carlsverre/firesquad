@@ -13,17 +13,17 @@ if __name__=="__main__":
 
     # Split Command
     split = subparsers.add_parser('split', help="Split a csv file into a number of chunks of <chunk-size> lines.")
-    split.add_argument('-s', '--chunk-size', dest="chunk_size", type=int, default=10000, help="The number of lines in each chunk.")
+    split.add_argument('-s', '--chunk-size', dest="chunk_size", type=int, default=16777216, help="The number of bytes in each chunk (approx: terminates on the nearest line boundary).")
     split.add_argument('-o', '--output-dir', dest="output_dir", required=True, help="The directory to write the split files to")
-    split.add_argument('files', default=[], nargs="*", help="A list of csv files to split.")
+    split.add_argument('files', default=[], nargs="+", help="A list of csv files to split.")
     split.set_defaults(CommandClass=Split)
 
     # Load Command
     load = subparsers.add_parser('load', help="Load data from csv files into MemSQL.")
     load.add_argument('-t', '--tables-dir', dest="tables_dir", required=True, help="The directory containing data/table definitions.")
     load.add_argument('-w', '--workers', type=int, default=8, help="The number of workers to run.")
-    load.add_argument('-o', '--host', required=True, help="The mysql instance to insert into.")
     load.add_argument('-d', '--database', required=True, help="The mysql database to insert into.")
+    load.add_argument('aggregators', default=[], nargs="+", help="A list of aggregators to load into.")
     load.set_defaults(CommandClass=Load)
 
     options = parser.parse_args()

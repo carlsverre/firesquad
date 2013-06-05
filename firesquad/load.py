@@ -5,13 +5,24 @@ import itertools
 import csv
 import time
 
+class CommaDialect(csv.Dialect):
+    delimiter = ','
+    doublequote = True
+    escapechar = '\\'
+    lineterminator = '\r\n'
+    quotechar = '"'
+    quoting = 0
+    skipinitialspace = False
+
 class Load():
     def __init__(self, options):
         self.options = options
+        self.aggregators = itertools.cycle(self.options.aggregators)
         self.work()
 
     def work(self):
         workers = []
+        waiting_workers = []
         table_dirs = [os.path.join(self.options.tables_dir, t) for t in os.listdir(self.options.tables_dir)]
         for table_dir in table_dirs:
             table_name = os.path.basename(table_dir)
@@ -19,17 +30,21 @@ class Load():
 
             for f in files:
                 while True:
-                    workers = [worker for worker in workers if worker.is_alive()]
+                    waiting_workers = [worker for worker in (waiting_workers + workers) if worker.is_alive() and worker.waiting_on_memsql.is_set()]
+                    workers = [worker for worker in workers if worker.is_alive() and not worker.waiting_on_memsql.is_set()]
                     if len(workers) < self.options.workers:
                         break
                     else:
-                        time.sleep(0.2)
+                        time.sleep(0.5)
 
                 print "Starting worker on %s with table %s" % (f, table_name)
-                worker = Worker(table_name, f, self.options.host, self.options.database)
+                print "Stats: workers(%d) waiting_workers(%d)" % (len(workers), len(waiting_workers))
+                worker = Worker(table_name, f, self.aggregators.next(), self.options.database)
                 worker.start()
                 workers.append(worker)
 
+            for worker in waiting_workers:
+                worker.join()
             for worker in workers:
                 worker.join()
 
@@ -56,7 +71,7 @@ def row_element_generator(rows):
         yield ")"
 
 class Worker(multiprocessing.Process):
-    def __init__(self, table_name, csv_path, mysql_host, mysql_db, multiinsert_length=50, dialect="excel"):
+    def __init__(self, table_name, csv_path, mysql_host, mysql_db, multiinsert_length=64, dialect="excel"):
         multiprocessing.Process.__init__(self)
         self.table_name = table_name
         self.csv_path = csv_path
@@ -65,12 +80,14 @@ class Worker(multiprocessing.Process):
         self.multiinsert_length = multiinsert_length
         self.dialect = dialect
 
+        self.waiting_on_memsql = multiprocessing.Event()
+
     def run(self):
-        mysql = subprocess.Popen(["mysql", "-u", "root", "-h", self.mysql_host, self.mysql_db], stdin=subprocess.PIPE, stderr=None, stdout=None)
+        mysql = subprocess.Popen(["mysql", "-u", "root", "-h", self.mysql_host, self.mysql_db], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         self.insert_prefix = "INSERT INTO %s VALUES " % self.table_name
 
         with open(self.csv_path, 'rb') as csv_file:
-            reader = csv.reader(csv_file, dialect=self.dialect)
+            reader = csv.reader(csv_file, dialect=CommaDialect())
             n = 0
             while True:
                 n += 1
@@ -80,8 +97,12 @@ class Worker(multiprocessing.Process):
                 self.insert(mysql.stdin, batch_iterator)
 
         # ensure mysql finishes
-        mysql.communicate()
-        print "mysql finished with returncode %d" % mysql.returncode
+        self.waiting_on_memsql.set()
+        stdoutdata, stderrdata = mysql.communicate()
+        if mysql.returncode != 0:
+            print "mysql error on file %s: \n%s\n\n%s" % (self.csv_path, stdoutdata, stderrdata)
+        else:
+            print "mysql finished with returncode %d" % mysql.returncode
 
     def insert(self, fd, rows):
         stmt = self.insert_prefix + ''.join([el for el in row_element_generator(rows)]) + ";"
