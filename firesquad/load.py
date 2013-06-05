@@ -90,7 +90,12 @@ class Worker(multiprocessing.Process):
         with open(self.csv_path, 'rb') as csv_file:
             # sniff file to figure out if it's comma or tab delimited
             dialect = CSVDialect()
-            sniff = csv.Sniffer().sniff(csv_file.read(2048))
+            try:
+                sniff = csv.Sniffer().sniff(csv_file.read(102400), "\t,")
+            except csv.Error:
+                # could not determine delimiter!
+                print "Could not determine delimiter for file %s" % self.csv_path
+                os._exit(1)
             csv_file.seek(0)
             dialect.delimiter = sniff.delimiter
 
