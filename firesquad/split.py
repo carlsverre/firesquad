@@ -58,7 +58,7 @@ class Split():
                 output_filename = os.path.join(output_dir, prefix_gen.next())
                 self.procs[output_filename] = self.dd_split(filename, b_start, b_end, output_filename, read_all)
 
-                while len([p for p in self.procs.values() if p.poll() is None]) > 16:
+                while len([p for p in self.procs.values() if p.poll() is None]) > self.options.parallelism:
                     print "waiting for workers"
                     time.sleep(.1)
 

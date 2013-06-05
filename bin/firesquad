@@ -15,6 +15,7 @@ if __name__=="__main__":
     split = subparsers.add_parser('split', help="Split a csv file into a number of chunks of <chunk-size> lines.")
     split.add_argument('-s', '--chunk-size', dest="chunk_size", type=int, default=16777216, help="The number of bytes in each chunk (approx: terminates on the nearest line boundary). MUST BE EVEN.")
     split.add_argument('-o', '--output-dir', dest="output_dir", required=True, help="The directory to write the split files to")
+    split.add_argument('-p', '--parallelism', type=int, default=24, help="The number of dd processes to run in parallel.")
     split.add_argument('files', default=[], nargs="+", help="A list of csv files to split.")
     split.set_defaults(CommandClass=Split)
 
