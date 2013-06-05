@@ -5,13 +5,14 @@ import itertools
 import csv
 import time
 
-class CommaDialect(csv.Dialect):
-    delimiter = ','
-    doublequote = True
-    escapechar = '\\'
-    lineterminator = '\r\n'
+class CSVDialect(csv.Dialect):
+    delimiter = ","
+    escapechar = "\\"
+    lineterminator = "\r\n"
     quotechar = '"'
-    quoting = 0
+
+    doublequote = False
+    quoting = csv.QUOTE_NONE
     skipinitialspace = False
 
 class Load():
@@ -87,7 +88,13 @@ class Worker(multiprocessing.Process):
         self.insert_prefix = "INSERT INTO %s VALUES " % self.table_name
 
         with open(self.csv_path, 'rb') as csv_file:
-            reader = csv.reader(csv_file, dialect=CommaDialect())
+            # sniff file to figure out if it's comma or tab delimited
+            dialect = CSVDialect()
+            sniff = csv.Sniffer().sniff(csv_file.read(2048))
+            csv_file.seek(0)
+            dialect.delimiter = sniff.delimiter
+
+            reader = csv.reader(csv_file, dialect=dialect)
             n = 0
             while True:
                 n += 1
