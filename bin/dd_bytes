@@ -1,0 +1,12 @@
+#!/bin/sh
+
+skip=$1
+bs=$2
+count=$3
+if=$4
+of=$5
+
+(
+    dd bs=1 skip=$skip count=0 ;
+    dd bs=$bs count=$count
+) < "$if" > "$of"

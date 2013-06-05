@@ -5,9 +5,16 @@ import itertools
 import time
 import sys
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BIN_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '../bin'))
+
 class Split():
     def __init__(self, options):
         self.options = options
+        cs = self.options.chunk_size
+        if (cs & (cs - 1)) != 0:
+            print "--chunk-size must be a power of 2!"
+            sys.exit(1)
         self.split()
 
     def split(self):
@@ -63,15 +70,27 @@ class Split():
                 self.procs[output_filename] = self.dd_split(filename, b_start, b_end, output_filename)
 
     def dd_split(self, filename, b_start, b_end, output_filename):
-        blocksize = self.options.chunk_size
-        skip_count = b_start / blocksize
-        count = 1
+        count, blocksize = self.factors(b_end - b_start)
         proc = subprocess.Popen([
-            'dd',
-            'skip=%d' % skip_count,     # skip <skip_count> blocks
-            'count=%d' % count,         # read 1 block
-            'bs=%d' % blocksize,        # each block is <bs> size in bytes
-            'if=%s' % filename,         # read from <if>
-            'of=%s' % output_filename   # write to <of>
+            os.path.join(BIN_DIR, 'dd_bytes'),
+            str(b_start),               # skip bytes before copy starts
+            str(blocksize),             # each block is <bs> size in bytes
+            str(count),                 # number of blocks to copy
+            filename,                   # read from <if>
+            output_filename             # write to <of>
         ], stdin=None, stdout=None, stderr=subprocess.PIPE)
         return proc
+
+    def factors(self, n):
+        if n % 2 == 0:
+            # special case 2 so we can remove all even numbers from the search
+            return 2, n / 2
+
+        i = int(math.sqrt(n))
+        for j in range(3, i + 1, 2):
+            if n % j == 0:
+                # at this point j is the smallest divisor so lets return the inverse
+                return j, n / j
+
+        # n is probably prime or some bullshit like that
+        return 1, n
