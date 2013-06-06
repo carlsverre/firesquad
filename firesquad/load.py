@@ -28,6 +28,10 @@ class Load():
         workers = []
         waiting_workers = []
 
+        # make sure the output dir exists
+        if self.options.finished_dir and not os.path.exists(self.options.finished_dir):
+            os.mkdir(self.options.finished_dir)
+
         table_dirs = [os.path.join(self.options.tables_dir, d) for d in os.listdir(self.options.tables_dir)] if self.options.tables_dir else []
         table_dirs += [os.path.abspath(d) for d in self.options.table_dirs]
 
@@ -41,14 +45,14 @@ class Load():
                 while True:
                     waiting_workers = [worker for worker in (waiting_workers + workers) if worker.is_alive() and worker.waiting_on_memsql.is_set()]
                     workers = [worker for worker in workers if worker.is_alive() and not worker.waiting_on_memsql.is_set()]
-                    if len(workers) + len(waiting_workers) < self.options.workers:
+                    if len(workers) < self.options.workers and len(waiting_workers) < self.options.max_sql_workers:
                         break
                     else:
+                        print "Stats: workers(%d) waiting_workers(%d)" % (len(workers), len(waiting_workers))
                         time.sleep(0.5)
 
                 print "Starting worker on %s with table %s" % (f, table_name)
-                print "Stats: workers(%d) waiting_workers(%d)" % (len(workers), len(waiting_workers))
-                worker = Worker(table_name, f, self.aggregators.next(), self.options.database)
+                worker = Worker(table_name, f, self.aggregators.next(), self.options.database, self.options.finished_dir)
                 worker.start()
                 workers.append(worker)
 
@@ -83,7 +87,7 @@ def row_element_generator(rows):
         yield ")"
 
 class Worker(multiprocessing.Process):
-    def __init__(self, table_name, csv_path, mysql_host, mysql_db, multiinsert_length=64, dialect="excel"):
+    def __init__(self, table_name, csv_path, mysql_host, mysql_db, finished_dir, multiinsert_length=64, dialect="excel"):
         multiprocessing.Process.__init__(self)
         self.table_name = table_name
         self.csv_path = csv_path
@@ -91,6 +95,7 @@ class Worker(multiprocessing.Process):
         self.mysql_db = mysql_db
         self.multiinsert_length = multiinsert_length
         self.dialect = dialect
+        self.finished_dir = finished_dir
 
         self.waiting_on_memsql = multiprocessing.Event()
 
@@ -127,6 +132,13 @@ class Worker(multiprocessing.Process):
             print "mysql error on file %s: \n%s\n\n%s" % (self.csv_path, stdoutdata, stderrdata)
         else:
             print "mysql finished with returncode %d" % mysql.returncode
+
+        if self.finished_dir:
+            # move the csv file to the output dir
+            finished_table_dir = os.path.join(self.finished_dir, self.table_name)
+            if not os.path.exists(finished_table_dir):
+                os.mkdir(finished_table_dir)
+            os.rename(self.csv_path, os.path.join(finished_table_dir, os.path.basename(self.csv_path)))
 
     def insert(self, fd, rows):
         stmt = self.insert_prefix + ''.join([el for el in row_element_generator(rows)]) + ";"
