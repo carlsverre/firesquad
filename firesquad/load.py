@@ -11,13 +11,6 @@ class CSVDialect(csv.Dialect):
     quoting = csv.QUOTE_NONE
     skipinitialspace = False
 
-def unicode_csv_reader(unicode_csv_data, **kwargs):
-    # csv.py doesn't do Unicode; encode temporarily as UTF-8:
-    csv_reader = csv.reader(unicode_csv_data, **kwargs)
-    for row in csv_reader:
-        # decode UTF-8 back to Unicode, cell by cell:
-        yield [unicode(cell, 'utf-8') for cell in row]
-
 class Load():
     def __init__(self, options):
         self.options = options
@@ -51,7 +44,7 @@ class Load():
                         time.sleep(0.5)
 
                 print "Starting worker on %s with table %s" % (f, table_name)
-                worker = Worker(table_name, f, self.aggregators.next(), self.options.database, self.options.finished_dir)
+                worker = Worker(table_name, f, self.options.csv_delimiter, self.aggregators.next(), self.options.database, self.options.finished_dir)
                 worker.start()
                 workers.append(worker)
 
@@ -93,10 +86,11 @@ def column_processor(row):
             yield col
 
 class Worker(multiprocessing.Process):
-    def __init__(self, table_name, csv_path, mysql_host, mysql_db, finished_dir, multiinsert_length=64, dialect="excel"):
+    def __init__(self, table_name, csv_path, csv_delimiter, mysql_host, mysql_db, finished_dir, multiinsert_length=64, dialect="excel"):
         multiprocessing.Process.__init__(self)
         self.table_name = table_name
         self.csv_path = csv_path
+        self.csv_delimiter = csv_delimiter
         self.mysql_host = mysql_host
         self.mysql_db = mysql_db
         self.multiinsert_length = multiinsert_length
@@ -112,7 +106,7 @@ class Worker(multiprocessing.Process):
         with open(self.csv_path, 'rb') as csv_file:
             # sniff file to figure out if it's comma or tab delimited
             dialect = CSVDialect()
-            dialect.delimiter = self.get_delimiter(csv_file)
+            dialect.delimiter = self.csv_delimiter or self.get_delimiter(csv_file)
 
             reader = csv.reader(csv_file, dialect=dialect)
             while True:
