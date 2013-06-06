@@ -62,7 +62,8 @@ def column_generator(row):
         if col == '\\N':
             yield "NULL"
         else:
-            yield '"' + col.replace('"', '\\"') + '"'
+            # yes this is rediculous.  you find a faster way to safely "escape" double quotes
+            yield '"' + col.replace('\\"', '"').replace('"', '\\"') + '"'
 
 def row_element_generator(rows):
     f1 = 0
