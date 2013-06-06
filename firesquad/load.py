@@ -29,11 +29,13 @@ class Load():
         waiting_workers = []
 
         table_dirs = [os.path.join(self.options.tables_dir, d) for d in os.listdir(self.options.tables_dir)] if self.options.tables_dir else []
-        table_dirs += self.options.table_dirs
+        table_dirs += [os.path.abspath(d) for d in self.options.table_dirs]
 
         for table_dir in table_dirs:
             table_name = os.path.basename(table_dir)
             files = [os.path.join(table_dir, f) for f in os.listdir(table_dir)]
+
+            print "Processing table: %s" % table_name
 
             for f in files:
                 while True:
@@ -54,6 +56,8 @@ class Load():
                 worker.join()
             for worker in workers:
                 worker.join()
+
+            print "Finished processing table: %s" % table_name
 
 def column_generator(row):
     for col in row:
