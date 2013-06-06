@@ -112,14 +112,7 @@ class Worker(multiprocessing.Process):
         with open(self.csv_path, 'rb') as csv_file:
             # sniff file to figure out if it's comma or tab delimited
             dialect = CSVDialect()
-            try:
-                sniff = csv.Sniffer().sniff(csv_file.read(102400), "\t,")
-            except csv.Error:
-                # could not determine delimiter!
-                print "Could not determine delimiter for file %s" % self.csv_path
-                os._exit(1)
-            csv_file.seek(0)
-            dialect.delimiter = sniff.delimiter
+            dialect.delimiter = self.get_delimiter(csv_file)
 
             reader = csv.reader(csv_file, dialect=dialect)
             while True:
@@ -142,3 +135,18 @@ class Worker(multiprocessing.Process):
             if not os.path.exists(finished_table_dir):
                 os.mkdir(finished_table_dir)
             os.rename(self.csv_path, os.path.join(finished_table_dir, os.path.basename(self.csv_path)))
+
+    def get_delimiter(self, csv_file):
+        b = 1024
+        while True:
+            try:
+                sniff = csv.Sniffer().sniff(csv_file.read(b), "\t,")
+                break
+            except csv.Error:
+                csv_file.seek(0)
+                b *= 2
+                if b > 10485760:    # only sniff up to 10MB
+                    raise Exception("Could not determine delimiter for file %s" % self.csv_path)
+
+        csv_file.seek(0)
+        return sniff.delimiter
