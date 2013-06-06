@@ -1,4 +1,5 @@
-import multiprocessing, os, sys, subprocess, itertools, csv, time, codecs
+import multiprocessing, os, sys, itertools, csv, time, codecs
+from firesquad import database
 
 class CSVDialect(csv.Dialect):
     delimiter = ","
@@ -26,7 +27,6 @@ class Load():
 
     def work(self):
         workers = []
-        waiting_workers = []
 
         # make sure the output dir exists
         if self.options.finished_dir and not os.path.exists(self.options.finished_dir):
@@ -43,12 +43,11 @@ class Load():
 
             for f in files:
                 while True:
-                    waiting_workers = [worker for worker in (waiting_workers + workers) if worker.is_alive() and worker.waiting_on_memsql.is_set()]
-                    workers = [worker for worker in workers if worker.is_alive() and not worker.waiting_on_memsql.is_set()]
-                    if len(workers) < self.options.workers and len(waiting_workers) < self.options.max_sql_workers:
+                    workers = [worker for worker in workers if worker.is_alive()]
+                    if len(workers) < self.options.workers:
                         break
                     else:
-                        print "Stats: workers(%d) waiting_workers(%d)" % (len(workers), len(waiting_workers))
+                        print "Running workers: %d" % len(workers)
                         time.sleep(0.5)
 
                 print "Starting worker on %s with table %s" % (f, table_name)
@@ -56,35 +55,42 @@ class Load():
                 worker.start()
                 workers.append(worker)
 
-            for worker in waiting_workers:
-                worker.join()
             for worker in workers:
                 worker.join()
 
             print "Finished processing table: %s" % table_name
 
-def column_generator(row):
+class RowCounter():
+    def __init__(self):
+        self.count = 0
+        self.col_count = 0
+
+    def update(self, col_count):
+        self.col_count = col_count
+        self.increment()
+        self.update = self.increment
+
+    def increment(self, n=None):
+        self.count += 1
+
+    def generate_rows(self):
+        row = "(" + ','.join(self.col_count * ["%s"]) + ")"
+        return ','.join([row] * self.count)
+
+def row_processor(rows, row_counter):
+    for row in rows:
+        n = 0
+        for col in column_processor(row):
+            n += 1
+            yield col
+        row_counter.update(n)
+
+def column_processor(row):
     for col in row:
         if col == '\\N':
             yield "NULL"
         else:
-            # yes this is rediculous.  you find a faster way to safely "escape" double quotes
-            yield '"' + col.replace('\\"', '"').replace('"', '\\"') + '"'
-
-def row_element_generator(rows):
-    f1 = 0
-    for row in rows:
-        f2 = 0
-        if f1:
-            yield ","
-        f1 = 1
-        yield "("
-        for col in column_generator(row):
-            if f2:
-                yield ","
-            f2 = 1
             yield col
-        yield ")"
 
 class Worker(multiprocessing.Process):
     def __init__(self, table_name, csv_path, mysql_host, mysql_db, finished_dir, multiinsert_length=64, dialect="excel"):
@@ -100,8 +106,7 @@ class Worker(multiprocessing.Process):
         self.waiting_on_memsql = multiprocessing.Event()
 
     def run(self):
-        mysql = subprocess.Popen(["mysql", "-u", "root", "-h", self.mysql_host, self.mysql_db], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-        mysql_stdin = codecs.getwriter('utf-8')(mysql.stdin)
+        mysql = database.connect(host=self.mysql_host, user="root", database=self.mysql_db)
         self.insert_prefix = "INSERT INTO %s VALUES " % self.table_name
 
         with open(self.csv_path, 'rb') as csv_file:
@@ -116,22 +121,20 @@ class Worker(multiprocessing.Process):
             csv_file.seek(0)
             dialect.delimiter = sniff.delimiter
 
-            reader = unicode_csv_reader(csv_file, dialect=dialect)
-            n = 0
+            reader = csv.reader(csv_file, dialect=dialect)
             while True:
-                n += 1
-                batch_iterator = list(itertools.islice(reader, self.multiinsert_length))
-                if batch_iterator == []:
-                    break
-                self.insert(mysql_stdin, batch_iterator)
+                batch_iterator = itertools.islice(reader, self.multiinsert_length)
+                row_counter = RowCounter()
+                args = [col for col in row_processor(batch_iterator, row_counter)]
 
-        # ensure mysql finishes
-        self.waiting_on_memsql.set()
-        stdoutdata, stderrdata = mysql.communicate()
-        if mysql.returncode != 0:
-            print "mysql error on file %s: \n%s\n\n%s" % (self.csv_path, stdoutdata, stderrdata)
-        else:
-            print "mysql finished with returncode %d" % mysql.returncode
+                if len(args) == 0:
+                    break
+
+                insert_stmt = self.insert_prefix + row_counter.generate_rows()
+                try:
+                    mysql.execute(insert_stmt, *args)
+                except database.MySQLError as e:
+                    print "mysql error on file %s:\n%s" % (self.csv_path, e)
 
         if self.finished_dir:
             # move the csv file to the output dir
@@ -139,8 +142,3 @@ class Worker(multiprocessing.Process):
             if not os.path.exists(finished_table_dir):
                 os.mkdir(finished_table_dir)
             os.rename(self.csv_path, os.path.join(finished_table_dir, os.path.basename(self.csv_path)))
-
-    def insert(self, fd, rows):
-        stmt = self.insert_prefix + ''.join([el for el in row_element_generator(rows)]) + ";"
-        fd.write(stmt)
-        fd.flush()
