@@ -1,10 +1,4 @@
-import multiprocessing
-import os
-import subprocess
-import itertools
-import csv
-import time
-import codecs
+import multiprocessing, os, sys, subprocess, itertools, csv, time, codecs
 
 class CSVDialect(csv.Dialect):
     delimiter = ","
@@ -26,6 +20,7 @@ def unicode_csv_reader(unicode_csv_data, **kwargs):
 class Load():
     def __init__(self, options):
         self.options = options
+        csv.field_size_limit(sys.maxsize)
         self.aggregators = itertools.cycle(self.options.aggregators)
         self.work()
 
