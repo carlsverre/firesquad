@@ -4,6 +4,7 @@ import subprocess
 import itertools
 import csv
 import time
+import codecs
 
 class CSVDialect(csv.Dialect):
     delimiter = ","
@@ -14,6 +15,13 @@ class CSVDialect(csv.Dialect):
     doublequote = False
     quoting = csv.QUOTE_NONE
     skipinitialspace = False
+
+def unicode_csv_reader(unicode_csv_data, **kwargs):
+    # csv.py doesn't do Unicode; encode temporarily as UTF-8:
+    csv_reader = csv.reader(unicode_csv_data, **kwargs)
+    for row in csv_reader:
+        # decode UTF-8 back to Unicode, cell by cell:
+        yield [unicode(cell, 'utf-8') for cell in row]
 
 class Load():
     def __init__(self, options):
@@ -85,6 +93,7 @@ class Worker(multiprocessing.Process):
 
     def run(self):
         mysql = subprocess.Popen(["mysql", "-u", "root", "-h", self.mysql_host, self.mysql_db], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        mysql_stdin = codecs.getwriter('utf-8')(mysql.stdin)
         self.insert_prefix = "INSERT INTO %s VALUES " % self.table_name
 
         with open(self.csv_path, 'rb') as csv_file:
@@ -99,14 +108,14 @@ class Worker(multiprocessing.Process):
             csv_file.seek(0)
             dialect.delimiter = sniff.delimiter
 
-            reader = csv.reader(csv_file, dialect=dialect)
+            reader = unicode_csv_reader(csv_file, dialect=dialect)
             n = 0
             while True:
                 n += 1
                 batch_iterator = list(itertools.islice(reader, self.multiinsert_length))
                 if batch_iterator == []:
                     break
-                self.insert(mysql.stdin, batch_iterator)
+                self.insert(mysql_stdin, batch_iterator)
 
         # ensure mysql finishes
         self.waiting_on_memsql.set()
