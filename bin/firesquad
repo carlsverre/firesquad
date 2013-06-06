@@ -21,7 +21,8 @@ if __name__=="__main__":
 
     # Load Command
     load = subparsers.add_parser('load', help="Load data from csv files into MemSQL.")
-    load.add_argument('-t', '--tables-dir', dest="tables_dir", required=True, help="The directory containing data/table definitions.")
+    load.add_argument('-t', '--tables-dir', dest="tables_dir", default=None, help="The directory containing data/table definitions.")
+    load.add_argument('--table-dir', default=[], dest="table_dirs", nargs="*", help="A single table directory.")
     load.add_argument('-w', '--workers', type=int, default=8, help="The number of workers to run.")
     load.add_argument('-d', '--database', required=True, help="The mysql database to insert into.")
     load.add_argument('aggregators', default=[], nargs="+", help="A list of aggregators to load into.")

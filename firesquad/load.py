@@ -27,7 +27,10 @@ class Load():
     def work(self):
         workers = []
         waiting_workers = []
-        table_dirs = [os.path.join(self.options.tables_dir, t) for t in os.listdir(self.options.tables_dir)]
+
+        table_dirs = [os.path.join(self.options.tables_dir, d) for d in os.listdir(self.options.tables_dir)] if self.options.tables_dir else []
+        table_dirs += self.options.table_dirs
+
         for table_dir in table_dirs:
             table_name = os.path.basename(table_dir)
             files = [os.path.join(table_dir, f) for f in os.listdir(table_dir)]
@@ -36,7 +39,7 @@ class Load():
                 while True:
                     waiting_workers = [worker for worker in (waiting_workers + workers) if worker.is_alive() and worker.waiting_on_memsql.is_set()]
                     workers = [worker for worker in workers if worker.is_alive() and not worker.waiting_on_memsql.is_set()]
-                    if len(workers) < self.options.workers:
+                    if len(workers) + len(waiting_workers) < self.options.workers:
                         break
                     else:
                         time.sleep(0.5)
