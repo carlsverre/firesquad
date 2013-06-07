@@ -1,4 +1,4 @@
-import multiprocessing, os, sys, itertools, csv, time, codecs
+import multiprocessing, os, sys, itertools, csv, time, codecs, subprocess
 from firesquad import database
 
 class CSVDialect(csv.Dialect):
@@ -85,6 +85,11 @@ def column_processor(row):
         else:
             yield col
 
+def lsof_file(path):
+    proc = subprocess.Popen(['lsof', '-Pnf', '--', path], stdin=None, stdout=None, stderr=None)
+    proc.wait()
+    return proc.returncode == 0
+
 class Worker(multiprocessing.Process):
     def __init__(self, table_name, csv_path, mysql_host, options):
         multiprocessing.Process.__init__(self)
@@ -96,6 +101,10 @@ class Worker(multiprocessing.Process):
     def run(self):
         mysql = database.connect(host=self.mysql_host, user="root", database=self.options.database)
         insert_prefix = "INSERT INTO %s VALUES " % self.table_name
+
+        if lsof_file(self.csv_path):
+            print "File is open by another process: %s" % (self.csv_path)
+            return
 
         with open(self.csv_path, 'rb') as csv_file:
             # sniff file to figure out if it's comma or tab delimited
