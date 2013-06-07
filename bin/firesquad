@@ -29,6 +29,7 @@ if __name__=="__main__":
     load.add_argument('-o', '--finished-dir', dest="finished_dir", default=None, help="Where to move processed files to. If omitted, files will not be moved.")
     load.add_argument('--csv-delimiter', dest="csv_delimiter", default=None, help="Force the csv reader to use the specified delimiter.  If missing, the csv reader will try to guess.")
     load.add_argument('--rows-per-insert', dest="rows_per_insert", type=int, default=64, help="Insert this many rows per insert.")
+    load.add_argument('--prepend-null', dest="prepend_null", default=False, action="store_true", help="Prepend a NULL to each inserted row.")
     load.add_argument('aggregators', default=[], nargs="+", help="A list of aggregators to load into.")
     load.set_defaults(CommandClass=Load)
 

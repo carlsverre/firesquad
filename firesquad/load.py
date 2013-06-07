@@ -70,9 +70,12 @@ class RowCounter():
         row = "(" + ','.join(self.col_count * ["%s"]) + ")"
         return ','.join([row] * self.count)
 
-def row_processor(rows, row_counter):
+def row_processor(rows, row_counter, prepend_null):
     for row in rows:
         n = 0
+        if prepend_null:
+            n += 1
+            yield None
         for col in column_processor(row):
             n += 1
             yield col
@@ -115,7 +118,7 @@ class Worker(multiprocessing.Process):
             while True:
                 batch_iterator = itertools.islice(reader, self.options.rows_per_insert)
                 row_counter = RowCounter()
-                args = [col for col in row_processor(batch_iterator, row_counter)]
+                args = [col for col in row_processor(batch_iterator, row_counter, self.options.prepend_null)]
 
                 if len(args) == 0:
                     break
