@@ -118,7 +118,14 @@ class Worker(multiprocessing.Process):
             while True:
                 batch_iterator = itertools.islice(reader, self.options.rows_per_insert)
                 row_counter = RowCounter()
-                args = [col for col in row_processor(batch_iterator, row_counter, self.options.prepend_null)]
+
+                try:
+                    args = [col for col in row_processor(batch_iterator, row_counter, self.options.prepend_null)]
+                except csv.Error as e:
+                    if "NULL byte" in str(e):
+                        print "Found null byte in line, skipping."
+                    else:
+                        raise e
 
                 if len(args) == 0:
                     break
