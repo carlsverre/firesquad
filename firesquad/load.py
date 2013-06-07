@@ -8,7 +8,7 @@ class CSVDialect(csv.Dialect):
     quotechar = '"'
 
     doublequote = False
-    quoting = csv.QUOTE_NONE
+    quoting = csv.QUOTE_MINIMAL
     skipinitialspace = False
 
 class Load():
