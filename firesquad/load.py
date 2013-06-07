@@ -102,9 +102,6 @@ class Worker(multiprocessing.Process):
             dialect = CSVDialect()
             dialect.delimiter = self.options.csv_delimiter or self.get_delimiter(csv_file)
 
-            if self.options.csv_skip_first:
-                csv_file.readline()
-
             reader = csv.reader(csv_file, dialect=dialect)
             while True:
                 batch_iterator = itertools.islice(reader, self.options.rows_per_insert)

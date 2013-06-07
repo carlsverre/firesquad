@@ -44,12 +44,18 @@ class Split():
         prefix_gen = itertools.imap(lambda i: "%03d" % i, itertools.count(0))
         file_size = os.path.getsize(filename)
         read_all = False
+        skipped_first = False
         with open(filename, 'r') as fd:
             while not read_all:
                 # ensure we arn't going to launch a dd process if we are at the parallelism limit
                 while len([p for p in self.procs.values() if p.poll() is None]) >= self.options.parallelism:
                     self.kill_finished_procs()
                     time.sleep(.3)
+
+                if self.options.strip_csv_header and not skipped_first:
+                    skipped_first = True
+                    # consume the first line
+                    fd.readline()
 
                 # store the current position
                 b_start = fd.tell()

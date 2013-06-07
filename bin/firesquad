@@ -16,6 +16,7 @@ if __name__=="__main__":
     split.add_argument('-s', '--chunk-size', dest="chunk_size", type=int, default=16777216, help="The number of bytes in each chunk (approx: terminates on the nearest line boundary). Must be a power of 2.")
     split.add_argument('-o', '--output-dir', dest="output_dir", required=True, help="The directory to write the split files to")
     split.add_argument('-p', '--parallelism', type=int, default=24, help="The number of dd processes to run in parallel.")
+    split.add_argument('--strip-csv-header', dest="strip_csv_header", default=False, action="store_true", help="Remove the first row, which hopefully is a CSV header.")
     split.add_argument('files', default=[], nargs="+", help="A list of csv files to split.")
     split.set_defaults(CommandClass=Split)
 
@@ -27,7 +28,6 @@ if __name__=="__main__":
     load.add_argument('-d', '--database', required=True, help="The mysql database to insert into.")
     load.add_argument('-o', '--finished-dir', dest="finished_dir", default=None, help="Where to move processed files to. If omitted, files will not be moved.")
     load.add_argument('--csv-delimiter', dest="csv_delimiter", default=None, help="Force the csv reader to use the specified delimiter.  If missing, the csv reader will try to guess.")
-    load.add_argument('--csv-skip-first', dest="csv_skip_first", default=False, action="store_true", help="Force the csv reader to skip the first row.")
     load.add_argument('--rows-per-insert', dest="rows_per_insert", type=int, default=64, help="Insert this many rows per insert.")
     load.add_argument('aggregators', default=[], nargs="+", help="A list of aggregators to load into.")
     load.set_defaults(CommandClass=Load)
