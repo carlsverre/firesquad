@@ -25,8 +25,10 @@ if __name__=="__main__":
     load.add_argument('--table-dir', default=[], dest="table_dirs", nargs="*", help="A single table directory.")
     load.add_argument('-w', '--workers', type=int, default=8, help="The number of workers to run.")
     load.add_argument('-d', '--database', required=True, help="The mysql database to insert into.")
-    load.add_argument('-o', '--finished-dir', default=None, help="Where to move processed files to. If omitted, files will not be moved.")
+    load.add_argument('-o', '--finished-dir', dest="finished_dir", default=None, help="Where to move processed files to. If omitted, files will not be moved.")
     load.add_argument('--csv-delimiter', dest="csv_delimiter", default=None, help="Force the csv reader to use the specified delimiter.  If missing, the csv reader will try to guess.")
+    load.add_argument('--csv-skip-first', dest="csv_skip_first", default=False, action="store_true", help="Force the csv reader to skip the first row.")
+    load.add_argument('--rows-per-insert', dest="rows_per_insert", type=int, default=64, help="Insert this many rows per insert.")
     load.add_argument('aggregators', default=[], nargs="+", help="A list of aggregators to load into.")
     load.set_defaults(CommandClass=Load)
 

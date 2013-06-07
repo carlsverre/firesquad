@@ -44,7 +44,7 @@ class Load():
                         time.sleep(0.5)
 
                 print "Starting worker on %s with table %s" % (f, table_name)
-                worker = Worker(table_name, f, self.options.csv_delimiter, self.aggregators.next(), self.options.database, self.options.finished_dir)
+                worker = Worker(table_name, f, self.aggregators.next(), self.options)
                 worker.start()
                 workers.append(worker)
 
@@ -86,48 +86,48 @@ def column_processor(row):
             yield col
 
 class Worker(multiprocessing.Process):
-    def __init__(self, table_name, csv_path, csv_delimiter, mysql_host, mysql_db, finished_dir, multiinsert_length=64, dialect="excel"):
+    def __init__(self, table_name, csv_path, mysql_host, options):
         multiprocessing.Process.__init__(self)
         self.table_name = table_name
         self.csv_path = csv_path
-        self.csv_delimiter = csv_delimiter
         self.mysql_host = mysql_host
-        self.mysql_db = mysql_db
-        self.multiinsert_length = multiinsert_length
-        self.dialect = dialect
-        self.finished_dir = finished_dir
-
-        self.waiting_on_memsql = multiprocessing.Event()
+        self.options = options
 
     def run(self):
-        mysql = database.connect(host=self.mysql_host, user="root", database=self.mysql_db)
-        self.insert_prefix = "INSERT INTO %s VALUES " % self.table_name
+        mysql = database.connect(host=self.mysql_host, user="root", database=self.options.database)
+        insert_prefix = "INSERT INTO %s VALUES " % self.table_name
 
         with open(self.csv_path, 'rb') as csv_file:
             # sniff file to figure out if it's comma or tab delimited
             dialect = CSVDialect()
-            dialect.delimiter = self.csv_delimiter or self.get_delimiter(csv_file)
+            dialect.delimiter = self.options.csv_delimiter or self.get_delimiter(csv_file)
+
+            if self.options.csv_skip_first:
+                csv_file.readline()
 
             reader = csv.reader(csv_file, dialect=dialect)
             while True:
-                batch_iterator = itertools.islice(reader, self.multiinsert_length)
+                batch_iterator = itertools.islice(reader, self.options.rows_per_insert)
                 row_counter = RowCounter()
                 args = [col for col in row_processor(batch_iterator, row_counter)]
 
                 if len(args) == 0:
                     break
 
-                insert_stmt = self.insert_prefix + row_counter.generate_rows()
+                insert_stmt = insert_prefix + row_counter.generate_rows()
                 try:
                     mysql.execute(insert_stmt, *args)
                 except database.MySQLError as e:
                     print "mysql error on file %s:\n%s" % (self.csv_path, e)
 
-        if self.finished_dir:
+        if self.options.finished_dir:
             # move the csv file to the output dir
-            finished_table_dir = os.path.join(self.finished_dir, self.table_name)
+            finished_table_dir = os.path.join(self.options.finished_dir, self.table_name)
             if not os.path.exists(finished_table_dir):
-                os.mkdir(finished_table_dir)
+                try:
+                    os.mkdir(finished_table_dir)
+                except os.error:
+                    pass
             os.rename(self.csv_path, os.path.join(finished_table_dir, os.path.basename(self.csv_path)))
 
     def get_delimiter(self, csv_file):
